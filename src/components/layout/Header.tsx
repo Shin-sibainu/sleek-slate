@@ -1,4 +1,5 @@
 import { headerNavItems } from "@/config/navItems";
+import { siteData } from "@/config/site";
 import Link from "next/link";
 
 const Header = () => {
@@ -7,7 +8,7 @@ const Header = () => {
       <div className="flex items-center justify-between ">
         <div>
           <Link href="/" className="md:text-3xl text-2xl font-bold">
-            ShinCode_Blog
+            {siteData.siteName}
           </Link>
         </div>
 
