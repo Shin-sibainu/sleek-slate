@@ -3,7 +3,7 @@
 // import { Metadata } from "next";
 // import { notFound, redirect } from "next/navigation";
 
-export const runtime = "edge";
+// export const runtime = "edge";
 
 // export async function generateMetadata({
 //   params,

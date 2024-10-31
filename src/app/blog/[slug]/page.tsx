@@ -15,7 +15,7 @@ import {
   getFeaturedPost,
 } from "@/lib/notionDataFetcher";
 
-export const runtime = 'edge';
+// export const runtime = 'edge';
 export const revalidate = 10;
 
 export async function generateMetadata({
