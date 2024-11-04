@@ -6,6 +6,7 @@ import {
 import { Client } from "@notionhq/client";
 import { PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import { NotionToMarkdown } from "notion-to-md";
+import { cache } from "react";
 
 // Notionのファイル型を定義
 type NotionFile = {
@@ -80,6 +81,51 @@ const notion = new Client({
   auth: process.env.NOTION_TOKEN,
 });
 
+// 公開済み記事の総数を取得する関数を修正
+async function getPublishedPostCount(): Promise<number> {
+  const response = await notion.databases.query({
+    database_id: process.env.NOTION_DATABASE_ID!,
+    filter: {
+      and: [
+        {
+          property: "Published",
+          checkbox: {
+            equals: true,
+          },
+        },
+      ],
+    },
+    page_size: 100, // 最大100件ずつ取得
+  });
+
+  let totalCount = response.results.length;
+  let nextCursor = response.next_cursor;
+
+  // 100件以上ある場合は、次のページも取得
+  while (nextCursor) {
+    const nextResponse = await notion.databases.query({
+      database_id: process.env.NOTION_DATABASE_ID!,
+      start_cursor: nextCursor,
+      filter: {
+        and: [
+          {
+            property: "Published",
+            checkbox: {
+              equals: true,
+            },
+          },
+        ],
+      },
+      page_size: 100,
+    });
+
+    totalCount += nextResponse.results.length;
+    nextCursor = nextResponse.next_cursor;
+  }
+
+  return totalCount;
+}
+
 export const getFeaturedPost = async (): Promise<
   PartialNotionBlog | null | undefined
 > => {
@@ -131,98 +177,103 @@ export const getFeaturedPost = async (): Promise<
   }
 };
 
-export const getBlogPosts = async ({
-  limit = 10,
-  startCursor,
-  getTotalCount = false,
-}: GetBlogPostsParams = {}): Promise<{
-  contents: PartialNotionBlog[];
-  totalCount?: number;
-  nextCursor: string | null;
-  hasMore: boolean;
-}> => {
-  try {
-    // フィーチャー記事を取得
-    const featuredPost = await getFeaturedPost();
-    const featuredPostSlug = featuredPost?.slug;
+export const getBlogPosts = cache(
+  async ({
+    limit = 10,
+    startCursor,
+    getTotalCount = false,
+  }: GetBlogPostsParams = {}): Promise<{
+    contents: PartialNotionBlog[];
+    totalCount?: number;
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> => {
+    try {
+      // フィーチャー記事を取得
+      const featuredPost = await getFeaturedPost();
+      const featuredPostSlug = featuredPost?.slug;
 
-    // Notionクエリの設定
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const queryParams: any = {
-      database_id: process.env.NOTION_DATABASE_ID!,
-      page_size: limit,
-      start_cursor: startCursor,
-      sorts: [
-        {
-          property: "Date",
-          direction: "descending",
-        },
-      ],
-      filter: {
-        and: [
+      // Notionクエリの設定
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const queryParams: any = {
+        database_id: process.env.NOTION_DATABASE_ID!,
+        page_size: limit,
+        start_cursor: startCursor || undefined, // startCursorが指定されている場合はそこから取得
+        sorts: [
           {
-            property: "Published",
-            checkbox: {
-              equals: true, // 公開済みの記事のみを取得
-            },
+            property: "Date",
+            direction: "descending",
           },
-          featuredPostSlug
-            ? {
-                property: "Slug",
-                rich_text: {
-                  does_not_equal: featuredPostSlug, // フィーチャー記事を除外
-                },
-              }
-            : undefined,
-        ].filter(Boolean),
-      }, // undefinedを除外
-    };
+        ],
+        filter: {
+          and: [
+            {
+              property: "Published",
+              checkbox: {
+                equals: true, // 公開済みの記事のみを取得
+              },
+            },
+            featuredPostSlug
+              ? {
+                  property: "Slug",
+                  rich_text: {
+                    does_not_equal: featuredPostSlug, // フィーチャー記事を除外
+                  },
+                }
+              : undefined,
+          ].filter(Boolean),
+        }, // undefinedを除外
+      };
 
-    const response = await notion.databases.query(queryParams);
+      const response = await notion.databases.query(queryParams);
 
-    const posts: PartialNotionBlog[] = response.results.map((page) => {
-      const pageObj = page as PageObjectResponse;
-      const properties = pageObj.properties as unknown as NotionProperties;
-      const thumbnailFile = properties.Thumbnail.files[0];
+      const posts: PartialNotionBlog[] = response.results.map((page) => {
+        const pageObj = page as PageObjectResponse;
+        const properties = pageObj.properties as unknown as NotionProperties;
+        const thumbnailFile = properties.Thumbnail.files[0];
+
+        return {
+          id: pageObj.id,
+          title: properties.Name.title[0]?.plain_text || "",
+          description: properties.Description.rich_text[0]?.plain_text || "",
+          slug: properties.Slug.rich_text[0]?.plain_text || "",
+          date: properties.Date?.date?.start || "",
+          tags: properties.Tags.multi_select.map((tag) => ({
+            id: tag.id,
+            name: tag.name,
+            color: tag.color,
+          })),
+          categories: properties.Categories.multi_select.map((category) => ({
+            id: category.id,
+            name: category.name,
+            color: category.color,
+          })),
+          thumbnail: thumbnailFile ? getThumbnailUrl(thumbnailFile) : null,
+        };
+      });
+
+      let totalCount = 0;
+      if (getTotalCount) {
+        totalCount = await getPublishedPostCount();
+      }
 
       return {
-        id: pageObj.id,
-        title: properties.Name.title[0]?.plain_text || "",
-        description: properties.Description.rich_text[0]?.plain_text || "",
-        slug: properties.Slug.rich_text[0]?.plain_text || "",
-        date: properties.Date?.date?.start || "",
-        tags: properties.Tags.multi_select.map((tag) => ({
-          id: tag.id,
-          name: tag.name,
-          color: tag.color,
-        })),
-        categories: properties.Categories.multi_select.map((category) => ({
-          id: category.id,
-          name: category.name,
-          color: category.color,
-        })),
-        thumbnail: thumbnailFile ? getThumbnailUrl(thumbnailFile) : null,
+        contents: posts,
+        totalCount, // フィーチャー記事を除いた総数
+        nextCursor: response.next_cursor,
+        hasMore: response.has_more,
       };
-    });
-
-    if (getTotalCount) {
-      // totalCount = await getPublishedPostCount();
+    } catch (error) {
+      console.error("Error fetching blog posts:", error);
+      return {
+        contents: [],
+        totalCount: 0,
+        nextCursor: null,
+        hasMore: false,
+      };
     }
-
-    return {
-      contents: posts,
-      nextCursor: response.next_cursor,
-      hasMore: response.has_more,
-    };
-  } catch (error) {
-    console.error("Error fetching blog posts:", error);
-    return {
-      contents: [],
-      nextCursor: null,
-      hasMore: false,
-    };
   }
-};
+);
 
 //詳細記事取得
 export const getDetailPost = async (slug: string) => {
@@ -263,6 +314,49 @@ export const getDetailPost = async (slug: string) => {
   } catch (error) {
     console.error("Error fetching post:", error);
     throw error;
+  }
+};
+
+//全タグの取得
+export const getAllTags = async (): Promise<Tag[]> => {
+  try {
+    const response = await notion.databases.retrieve({
+      database_id: process.env.NOTION_DATABASE_ID!,
+    });
+
+    if (response.properties.Tags.type === "multi_select") {
+      return response.properties.Tags.multi_select.options.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        color: tag.color,
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error("タグの取得中にエラーが発生しました:", error);
+    return [];
+  }
+};
+
+export const getAllCategories = async (): Promise<Category[]> => {
+  try {
+    const response = await notion.databases.retrieve({
+      database_id: process.env.NOTION_DATABASE_ID!,
+    });
+
+    if (response.properties.Categories.type === "multi_select") {
+      return response.properties.Categories.multi_select.options.map(
+        (category) => ({
+          id: category.id,
+          name: category.name,
+          color: category.color,
+        })
+      );
+    }
+    return [];
+  } catch (error) {
+    console.error("カテゴリーの取得中にエラーが発生しました:", error);
+    return [];
   }
 };
 

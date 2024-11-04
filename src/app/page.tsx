@@ -1,5 +1,6 @@
 import BlogCard from "@/components/blog/BlogCard";
 import BlogList from "@/components/blog/BlogList";
+import Pagination from "@/components/ui/Pagination";
 // import Pagination from "@/components/ui/Pagination";
 import { getBlogPosts, getFeaturedPost } from "@/lib/notionDataFetcher";
 import { notFound } from "next/navigation";
@@ -17,15 +18,12 @@ export default async function Home() {
     }),
   ]);
 
-  const { contents: posts } = blogData;
+  const { contents: posts, totalCount } = blogData;
+  const totalPages = Math.ceil(totalCount! / POSTS_PER_PAGE);
 
   if (!posts) {
     notFound();
   }
-
-  // console.log(posts);
-  // console.log(nextCursor, hasMore);
-  // const totalPages = Math.ceil(totalCount / POSTS_PER_PAGE);
 
   return (
     <div className="my-10 max-w-3xl mx-auto">
@@ -37,7 +35,9 @@ export default async function Home() {
         <BlogList posts={posts} />
       </div>
 
-      <div>{/* <Pagination currentPage={1} totalPages={totalPages} /> */}</div>
+      <div>
+        <Pagination currentPage={1} totalPages={totalPages} />
+      </div>
     </div>
   );
 }
