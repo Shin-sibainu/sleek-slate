@@ -275,6 +275,162 @@ export const getBlogPosts = cache(
   }
 );
 
+export const getPostsByTag = cache(
+  async ({
+    tagName,
+    limit = 10,
+    startCursor,
+    getTotalCount = false,
+    skipFirst = false,
+  }: {
+    tagName: string;
+    limit?: number;
+    startCursor?: string;
+    getTotalCount?: boolean;
+    skipFirst?: boolean;
+  }) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const queryParams: any = {
+        database_id: process.env.NOTION_DATABASE_ID!,
+        page_size: limit,
+        start_cursor: startCursor || undefined,
+        sorts: [
+          {
+            property: "Date",
+            direction: "descending",
+          },
+        ],
+        filter: {
+          and: [
+            {
+              property: "Published",
+              checkbox: {
+                equals: true,
+              },
+            },
+            {
+              or: [
+                {
+                  property: "Tags",
+                  multi_select: {
+                    contains: tagName, // オリジナルのタグ名
+                  },
+                },
+                {
+                  property: "Tags",
+                  multi_select: {
+                    contains: tagName.toLowerCase(), // 小文字のタグ名
+                  },
+                },
+                {
+                  property: "Tags",
+                  multi_select: {
+                    contains:
+                      tagName.charAt(0).toUpperCase() + tagName.slice(1), // 先頭大文字のタグ名
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const response = await notion.databases.query(queryParams);
+
+      let posts: PartialNotionBlog[] = response.results.map((page) => {
+        const pageObj = page as PageObjectResponse;
+        const properties = pageObj.properties as unknown as NotionProperties;
+        const thumbnailFile = properties.Thumbnail.files[0];
+
+        return {
+          id: pageObj.id,
+          title: properties.Name.title[0]?.plain_text || "",
+          description: properties.Description.rich_text[0]?.plain_text || "",
+          slug: properties.Slug.rich_text[0]?.plain_text || "",
+          date: properties.Date?.date?.start || "",
+          tags: properties.Tags.multi_select.map((tag) => ({
+            id: tag.id,
+            name: tag.name,
+            color: tag.color,
+          })),
+          categories: properties.Categories.multi_select.map((category) => ({
+            id: category.id,
+            name: category.name,
+            color: category.color,
+          })),
+          thumbnail: thumbnailFile ? getThumbnailUrl(thumbnailFile) : null,
+        };
+      });
+
+      // skipFirstがtrueの場合、最初の記事をスキップ
+      if (skipFirst && posts.length > 0) {
+        posts = posts.slice(1);
+      }
+
+      let totalCount = 0;
+      if (getTotalCount) {
+        // タグに関連する公開済み記事の総数を取得
+        const countResponse = await notion.databases.query({
+          database_id: process.env.NOTION_DATABASE_ID!,
+          filter: {
+            and: [
+              {
+                property: "Published",
+                checkbox: {
+                  equals: true,
+                },
+              },
+              {
+                property: "Tags",
+                multi_select: {
+                  contains: tagName,
+                },
+              },
+            ],
+          },
+        });
+        totalCount = countResponse.results.length;
+      }
+
+      return {
+        contents: posts,
+        totalCount,
+        nextCursor: response.next_cursor,
+        hasMore: response.has_more,
+      };
+    } catch (error) {
+      console.error("Error fetching posts by tag:", error);
+      return {
+        contents: [],
+        totalCount: 0,
+        nextCursor: null,
+        hasMore: false,
+      };
+    }
+  }
+);
+
+export const getAllTags = async (): Promise<Tag[]> => {
+  try {
+    const response = await notion.databases.retrieve({
+      database_id: process.env.NOTION_DATABASE_ID!,
+    });
+
+    if (response.properties.Tags.type === "multi_select") {
+      return response.properties.Tags.multi_select.options.map((tag) => ({
+        id: tag.id,
+        name: tag.name,
+        color: tag.color,
+      }));
+    }
+    return [];
+  } catch (error) {
+    console.error("タグの取得中にエラーが発生しました:", error);
+    return [];
+  }
+};
+
 //詳細記事取得
 export const getDetailPost = async (slug: string) => {
   try {
@@ -314,27 +470,6 @@ export const getDetailPost = async (slug: string) => {
   } catch (error) {
     console.error("Error fetching post:", error);
     throw error;
-  }
-};
-
-//全タグの取得
-export const getAllTags = async (): Promise<Tag[]> => {
-  try {
-    const response = await notion.databases.retrieve({
-      database_id: process.env.NOTION_DATABASE_ID!,
-    });
-
-    if (response.properties.Tags.type === "multi_select") {
-      return response.properties.Tags.multi_select.options.map((tag) => ({
-        id: tag.id,
-        name: tag.name,
-        color: tag.color,
-      }));
-    }
-    return [];
-  } catch (error) {
-    console.error("タグの取得中にエラーが発生しました:", error);
-    return [];
   }
 };
 

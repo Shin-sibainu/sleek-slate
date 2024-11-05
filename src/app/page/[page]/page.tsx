@@ -19,7 +19,7 @@ export async function generateMetadata({
   };
 }
 
-const POSTS_PER_PAGE = 4;
+const POSTS_PER_PAGE = 6;
 
 const Page = async ({ params }: { params: { page: string } }) => {
   const currentPage = Number(params.page);

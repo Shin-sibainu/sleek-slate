@@ -22,7 +22,14 @@ const Footer = () => {
 
         <div className="text-slate-300 text-sm md:text-base">
           <span>
-            Copyright © {new Date().getFullYear()} Created By NotionPress
+            Copyright © {new Date().getFullYear()} Created By {""}
+            <Link
+              href="https://notionpress.net"
+              target="_blank"
+              rel="noreferrer"
+            >
+              NotionPress
+            </Link>
           </span>
         </div>
       </div>

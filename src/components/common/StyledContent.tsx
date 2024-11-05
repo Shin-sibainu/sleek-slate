@@ -57,7 +57,9 @@ const StyledContent = ({ content }: StyledContentProps) => {
             margin: 0,
             padding: "1rem",
             borderRadius: "0.5rem",
+            overflow: "auto",
           }}
+          wrapLongLines={false}
         >
           {code}
         </SyntaxHighlighter>
@@ -71,21 +73,21 @@ const StyledContent = ({ content }: StyledContentProps) => {
         switch (domNode.name) {
           case "h1":
             return (
-              <h1 className="text-4xl font-bold mb-6 mt-12 text-gray-800 leading-tight">
+              <h1 className="text-3xl sm:text-4xl font-bold mb-6 mt-12 text-gray-800 leading-tight">
                 {domToReact(domNode.children as DOMNode[], options)}
               </h1>
             );
 
           case "h2":
             return (
-              <h2 className="text-3xl font-semibold mb-4 mt-10 text-gray-800 leading-snug">
+              <h2 className="text-2xl sm:text-3xl font-semibold mb-4 mt-10 text-gray-800 leading-snug">
                 {domToReact(domNode.children as DOMNode[], options)}
               </h2>
             );
 
           case "h3":
             return (
-              <h3 className="text-2xl font-semibold mb-3 mt-8 text-gray-700">
+              <h3 className="text-xl sm:text-2xl font-semibold mb-3 mt-8 text-gray-700">
                 {domToReact(domNode.children as DOMNode[], options)}
               </h3>
             );
@@ -107,7 +109,7 @@ const StyledContent = ({ content }: StyledContentProps) => {
 
             return (
               <p
-                className={`text-lg leading-relaxed text-gray-600 ${
+                className={`text-base sm:text-lg leading-relaxed text-gray-600 ${
                   isInsideBlockquote ? "" : "mb-8"
                 }`}
               >
@@ -131,7 +133,7 @@ const StyledContent = ({ content }: StyledContentProps) => {
 
           case "li":
             return (
-              <li className="text-lg leading-relaxed pl-2">
+              <li className="text-base sm:text-lg leading-relaxed pl-2">
                 {domToReact(domNode.children as DOMNode[], options)}
               </li>
             );
@@ -158,7 +160,7 @@ const StyledContent = ({ content }: StyledContentProps) => {
           case "code":
             if ((domNode.parent as Element)?.name !== "pre") {
               return (
-                <code className="px-2 py-1 bg-gray-100 text-red-600 rounded font-mono text-sm break-words">
+                <code className="px-2 py-1 bg-gray-100 text-red-600 rounded font-mono text-xs sm:text-sm break-words">
                   {domToReact(domNode.children as DOMNode[], options)}
                 </code>
               );
@@ -167,11 +169,15 @@ const StyledContent = ({ content }: StyledContentProps) => {
               domNode.attribs.class?.replace("language-", "") || "plaintext";
             const code = (domNode.children[0] as unknown as { data: string })
               .data;
-            return <CodeBlock code={code} language={language} />;
+            return (
+              <div className="px-4 sm:px-0">
+                <CodeBlock code={code} language={language} />
+              </div>
+            );
 
           case "pre":
             return (
-              <div className="my-8">
+              <div className="my-8 -mx-4 sm:mx-0">
                 {domToReact(domNode.children as DOMNode[], options)}
               </div>
             );
@@ -203,10 +209,12 @@ const StyledContent = ({ content }: StyledContentProps) => {
 
           case "table":
             return (
-              <div className="my-8 overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 border">
-                  {domToReact(domNode.children as DOMNode[], options)}
-                </table>
+              <div className="my-8 overflow-x-auto -mx-4 sm:mx-0">
+                <div className="inline-block min-w-full align-middle">
+                  <table className="min-w-full divide-y divide-gray-200 border">
+                    {domToReact(domNode.children as DOMNode[], options)}
+                  </table>
+                </div>
               </div>
             );
 
@@ -230,7 +238,11 @@ const StyledContent = ({ content }: StyledContentProps) => {
 
   const htmlContent = marked.parse(content) as string;
 
-  return <div className="max-w-none">{parse(htmlContent, options)}</div>;
+  return (
+    <div className="max-w-2xl md:max-w-3xl mx-auto">
+      {parse(htmlContent, options)}
+    </div>
+  );
 };
 
 export default StyledContent;

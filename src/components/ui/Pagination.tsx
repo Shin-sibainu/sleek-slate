@@ -5,11 +5,13 @@ import { ReactNode } from "react";
 type PaginationProps = {
   currentPage: number;
   totalPages: number;
+  basePath?: string;
 };
 
 export default function Pagination({
   currentPage,
   totalPages,
+  basePath = "",
 }: PaginationProps) {
   const pageNumbers = [];
   const maxVisiblePages = 5; // 表示するページ数の最大値
@@ -33,9 +35,9 @@ export default function Pagination({
     children: ReactNode;
   }) => (
     <Link
-      href={`/page/${page}`}
-      className={`border px-4 py-2 rounded-lg hover:bg-teal-600 hover:text-white duration-150 ${
-        currentPage === page ? "bg-teal-600 text-white" : "border-teal-600"
+      href={basePath === "" && page === 1 ? "/" : `${basePath}/page/${page}`}
+      className={`border px-4 py-2 rounded-lg hover:bg-zinc-700 hover:text-white duration-150 ${
+        currentPage === page ? "bg-zinc-700 text-white" : "border-zinc-700"
       }`}
     >
       {children}
