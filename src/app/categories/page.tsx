@@ -16,7 +16,7 @@ const Categories = async () => {
       <div className="flex flex-wrap gap-6 justify-center">
         {categories.map((category) => (
           <Link
-            href={`/categories/${category.name.toLowerCase()}`}
+            href={`/categories/${category.name.toLowerCase()}/page/1`}
             key={category.id}
             className="bg-slate-200 px-4 py-2 rounded-md hover:bg-zinc-700 duration-150 hover:text-white"
           >

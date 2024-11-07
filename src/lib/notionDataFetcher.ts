@@ -275,6 +275,48 @@ export const getBlogPosts = cache(
   }
 );
 
+//詳細記事取得
+export const getDetailPost = async (slug: string) => {
+  try {
+    const [pageResponse] = await Promise.all([
+      notion.databases.query({
+        database_id: process.env.NOTION_DATABASE_ID!,
+        filter: {
+          property: "Slug",
+          formula: {
+            string: {
+              equals: slug,
+            },
+          },
+        },
+        page_size: 1,
+      }),
+      notion.databases.retrieve({
+        database_id: process.env.NOTION_DATABASE_ID!,
+      }),
+    ]);
+
+    if (!pageResponse.results[0]) {
+      throw new Error("Post not found");
+    }
+
+    const page = pageResponse.results[0] as PageObjectResponse;
+    const metadata = getPageMetaData(page);
+
+    const n2m = new NotionToMarkdown({ notionClient: notion });
+    const mdBlocks = await n2m.pageToMarkdown(page.id, 2);
+    const mdString = n2m.toMarkdownString(mdBlocks);
+
+    return {
+      metadata,
+      markdown: mdString.parent,
+    };
+  } catch (error) {
+    console.error("Error fetching post:", error);
+    throw error;
+  }
+};
+
 export const getPostsByTag = cache(
   async ({
     tagName,
@@ -431,48 +473,6 @@ export const getAllTags = async (): Promise<Tag[]> => {
   }
 };
 
-//詳細記事取得
-export const getDetailPost = async (slug: string) => {
-  try {
-    const [pageResponse] = await Promise.all([
-      notion.databases.query({
-        database_id: process.env.NOTION_DATABASE_ID!,
-        filter: {
-          property: "Slug",
-          formula: {
-            string: {
-              equals: slug,
-            },
-          },
-        },
-        page_size: 1,
-      }),
-      notion.databases.retrieve({
-        database_id: process.env.NOTION_DATABASE_ID!,
-      }),
-    ]);
-
-    if (!pageResponse.results[0]) {
-      throw new Error("Post not found");
-    }
-
-    const page = pageResponse.results[0] as PageObjectResponse;
-    const metadata = getPageMetaData(page);
-
-    const n2m = new NotionToMarkdown({ notionClient: notion });
-    const mdBlocks = await n2m.pageToMarkdown(page.id, 2);
-    const mdString = n2m.toMarkdownString(mdBlocks);
-
-    return {
-      metadata,
-      markdown: mdString.parent,
-    };
-  } catch (error) {
-    console.error("Error fetching post:", error);
-    throw error;
-  }
-};
-
 export const getAllCategories = async (): Promise<Category[]> => {
   try {
     const response = await notion.databases.retrieve({
@@ -494,6 +494,143 @@ export const getAllCategories = async (): Promise<Category[]> => {
     return [];
   }
 };
+
+export const getPostsByCategory = cache(
+  async ({
+    categoryName,
+    limit = 10,
+    startCursor,
+    getTotalCount = false,
+    skipFirst = false,
+  }: {
+    categoryName: string;
+    limit?: number;
+    startCursor?: string;
+    getTotalCount?: boolean;
+    skipFirst?: boolean;
+  }) => {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const queryParams: any = {
+        database_id: process.env.NOTION_DATABASE_ID!,
+        page_size: limit,
+        start_cursor: startCursor || undefined,
+        sorts: [
+          {
+            property: "Date",
+            direction: "descending",
+          },
+        ],
+        filter: {
+          and: [
+            {
+              property: "Published",
+              checkbox: {
+                equals: true,
+              },
+            },
+            {
+              or: [
+                {
+                  property: "Categories",
+                  multi_select: {
+                    contains: categoryName, // オリジナルのカテゴリー名
+                  },
+                },
+                {
+                  property: "Categories",
+                  multi_select: {
+                    contains: categoryName.toLowerCase(), // 小文字のカテゴリー名
+                  },
+                },
+                {
+                  property: "Categories",
+                  multi_select: {
+                    contains:
+                      categoryName.charAt(0).toUpperCase() +
+                      categoryName.slice(1), // 先頭大文字のカテゴリー名
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const response = await notion.databases.query(queryParams);
+
+      let posts: PartialNotionBlog[] = response.results.map((page) => {
+        const pageObj = page as PageObjectResponse;
+        const properties = pageObj.properties as unknown as NotionProperties;
+        const thumbnailFile = properties.Thumbnail.files[0];
+
+        return {
+          id: pageObj.id,
+          title: properties.Name.title[0]?.plain_text || "",
+          description: properties.Description.rich_text[0]?.plain_text || "",
+          slug: properties.Slug.rich_text[0]?.plain_text || "",
+          date: properties.Date?.date?.start || "",
+          tags: properties.Tags.multi_select.map((tag) => ({
+            id: tag.id,
+            name: tag.name,
+            color: tag.color,
+          })),
+          categories: properties.Categories.multi_select.map((category) => ({
+            id: category.id,
+            name: category.name,
+            color: category.color,
+          })),
+          thumbnail: thumbnailFile ? getThumbnailUrl(thumbnailFile) : null,
+        };
+      });
+
+      // skipFirstがtrueの場合、最初の記事をスキップ
+      if (skipFirst && posts.length > 0) {
+        posts = posts.slice(1);
+      }
+
+      let totalCount = 0;
+      if (getTotalCount) {
+        // カテゴリーに関連する公開済み記事の総数を取得
+        const countResponse = await notion.databases.query({
+          database_id: process.env.NOTION_DATABASE_ID!,
+          filter: {
+            and: [
+              {
+                property: "Published",
+                checkbox: {
+                  equals: true,
+                },
+              },
+              {
+                property: "Categories",
+                multi_select: {
+                  contains: categoryName,
+                },
+              },
+            ],
+          },
+        });
+        totalCount = countResponse.results.length;
+      }
+
+      return {
+        contents: posts,
+        totalCount,
+        nextCursor: response.next_cursor,
+        hasMore: response.has_more,
+      };
+    } catch (error) {
+      console.error("Error fetching posts by category:", error);
+      return {
+        contents: [],
+        totalCount: 0,
+        nextCursor: null,
+        hasMore: false,
+      };
+    }
+  }
+);
 
 function getPageMetaData(page: PageObjectResponse): PageMetadata {
   const properties = page.properties;
