@@ -141,7 +141,7 @@ const StyledContent = ({ content }: StyledContentProps) => {
           case "a":
             return (
               <a
-                className="text-blue-600 hover:text-blue-800 underline decoration-blue-300 hover:decoration-blue-500 transition-colors duration-200"
+                className="text-blue-600 hover:text-blue-800 underline decoration-blue-300 hover:decoration-blue-500 transition-colors duration-200 break-words"
                 href={domNode.attribs.href}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -239,7 +239,7 @@ const StyledContent = ({ content }: StyledContentProps) => {
   const htmlContent = marked.parse(content) as string;
 
   return (
-    <div className="max-w-2xl md:max-w-3xl mx-auto">
+    <div className="w-full md:max-w-3xl mx-auto">
       {parse(htmlContent, options)}
     </div>
   );
